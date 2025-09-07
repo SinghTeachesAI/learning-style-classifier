@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as plt
 import seaborn as sns
 import joblib
@@ -63,7 +63,7 @@ except FileNotFoundError:
     clf, le = train_model(df)
 
 # =========================
-# Evaluate Model
+# Evaluate Model in Background
 # =========================
 def evaluate_model(df, clf, le):
     X = df.drop(['student_id', 'learning_style'], axis=1)
@@ -72,17 +72,15 @@ def evaluate_model(df, clf, le):
         X, y, test_size=0.2, random_state=42
     )
     y_pred = clf.predict(X_test)
-    report = classification_report(y_test, y_pred, target_names=le.classes_, output_dict=True)
-    return report, y_test, y_pred
+    return y_test, y_pred
 
-report, y_test, y_pred = evaluate_model(df, clf, le)
+y_test, y_pred = evaluate_model(df, clf, le)
 
 # =========================
 # Sidebar Inputs
 # =========================
 st.sidebar.header("🎛️ Student Input Simulator")
 
-# Session State Defaults
 for key, default in zip(["video","reading","practice","quizzes","score"], [30,30,30,10,75]):
     if key not in st.session_state:
         st.session_state[key] = default
@@ -136,12 +134,12 @@ with col1:
             st.info("📝 Recommendation: Solve practice problems, quizzes, and hands-on tasks.")
 
 # -------------------------
-# Model Evaluation
+# Visual Evaluation
 # -------------------------
 with col2:
-    st.subheader("📊 Model Evaluation")
-    st.json(report)
+    st.subheader("📊 Model Evaluation (Visuals Only)")
 
+    # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
     fig, ax = plt.subplots()
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues",
@@ -150,9 +148,9 @@ with col2:
     ax.set_ylabel("Actual")
     st.pyplot(fig)
 
-# -------------------------
+# =========================
 # Batch Prediction
-# -------------------------
+# =========================
 st.subheader("📂 Batch Prediction from CSV")
 uploaded_file = st.file_uploader("Upload CSV with student data", type="csv")
 
@@ -160,7 +158,7 @@ if uploaded_file:
     new_data = pd.read_csv(uploaded_file)
     st.write("Preview:", new_data.head())
     required_features = ['time_on_video','time_on_reading','time_on_practice','num_quizzes_attempted','avg_quiz_score']
-    
+
     if set(required_features).issubset(new_data.columns):
         with st.spinner("Processing batch predictions..."):
             time.sleep(1)
@@ -173,59 +171,33 @@ if uploaded_file:
     else:
         st.error(f"Missing columns! Required: {required_features}")
 
-# -------------------------
-# Feature Importance
-# -------------------------
-with st.expander("🔍 Feature Importance"):
-    feat_df = pd.DataFrame({
-        'Feature': df.drop(['student_id','learning_style'], axis=1).columns,
-        'Importance': clf.feature_importances_
-    }).sort_values(by="Importance", ascending=True)
-    st.bar_chart(feat_df.set_index("Feature"))
-
-# -------------------------
-# Learning Style Distribution
-# -------------------------
-with st.expander("📊 Learning Style Distribution"):
-    fig, ax = plt.subplots()
-    sns.countplot(data=df, x='learning_style', ax=ax)
-    ax.set_title("Distribution of Learning Styles")
-    st.pyplot(fig)
-
-# -------------------------
+# =========================
 # Interactive Feature Sensitivity
-# -------------------------
+# =========================
 st.subheader("⚙️ Explore Feature Impact")
-
 feature_to_adjust = st.selectbox(
     "Select a feature to vary",
     ['time_on_video','time_on_reading','time_on_practice','num_quizzes_attempted','avg_quiz_score']
 )
-
 min_val = int(df[feature_to_adjust].min())
 max_val = int(df[feature_to_adjust].max())
-
 adjust_values = st.slider(
     f"Adjust {feature_to_adjust}",
     min_val, max_val, (min_val, max_val)
 )
-
 simulate_df = pd.DataFrame([{feature_to_adjust: val,
                              **{f: st.session_state.get(f, df[f].mean()) for f in df.drop(['student_id','learning_style',feature_to_adjust], axis=1).columns}}
                             for val in range(adjust_values[0], adjust_values[1]+1, max(1,(adjust_values[1]-adjust_values[0])//20))])
-
 prob_matrix = clf.predict_proba(simulate_df)
 prob_df = pd.DataFrame(prob_matrix, columns=le.classes_)
 prob_df[feature_to_adjust] = simulate_df[feature_to_adjust]
-
 st.line_chart(prob_df.set_index(feature_to_adjust))
 
-# -------------------------
-# Multi-Student "What-If" Simulator
-# -------------------------
+# =========================
+# Multi-Student Simulator
+# =========================
 st.subheader("🧪 Compare Multiple Students")
 num_students = st.number_input("Number of hypothetical students", 1, 5, 2)
-
 multi_data = []
 for i in range(num_students):
     st.markdown(f"**Student {i+1}**")
@@ -233,18 +205,26 @@ for i in range(num_students):
     for f in ['time_on_video','time_on_reading','time_on_practice','num_quizzes_attempted','avg_quiz_score']:
         student_dict[f] = st.slider(f"{f} (Student {i+1})", int(df[f].min()), int(df[f].max()), int(df[f].mean()), key=f"{f}_{i}")
     multi_data.append(student_dict)
-
 if st.button("Compare Students"):
     multi_df = pd.DataFrame(multi_data)
     preds = clf.predict(multi_df)
     multi_df['Predicted Learning Style'] = le.inverse_transform(preds)
     st.dataframe(multi_df)
 
-# -------------------------
-# Feedback
-# -------------------------
+# =========================
+# Sidebar Feedback
+# =========================
 st.sidebar.markdown("---")
 st.sidebar.subheader("💬 Feedback")
 feedback = st.sidebar.text_area("Share your feedback or suggestions:")
 if st.sidebar.button("Submit Feedback"):
     st.sidebar.success("Thank you for your feedback!")
+
+# =========================
+# Optional: Learning Style Distribution (visual)
+# =========================
+with st.expander("📊 Learning Style Distribution"):
+    fig2, ax2 = plt.subplots()
+    sns.countplot(data=df, x='learning_style', ax=ax2)
+    ax2.set_title("Distribution of Learning Styles")
+    st.pyplot(fig2)
