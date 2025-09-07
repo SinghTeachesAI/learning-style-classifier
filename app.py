@@ -137,7 +137,7 @@ with col1:
 # Visual Evaluation
 # -------------------------
 with col2:
-    st.subheader("📊 Model Evaluation (Visuals Only)")
+    st.subheader("📊 Model Evaluation")
 
     # Confusion Matrix
     cm = confusion_matrix(y_test, y_pred)
@@ -175,9 +175,11 @@ if uploaded_file:
 # Interactive Feature Sensitivity
 # =========================
 st.subheader("⚙️ Explore Feature Impact")
+feature_cols = df.drop(['student_id', 'learning_style'], axis=1).columns
+
 feature_to_adjust = st.selectbox(
     "Select a feature to vary",
-    ['time_on_video','time_on_reading','time_on_practice','num_quizzes_attempted','avg_quiz_score']
+    feature_cols
 )
 min_val = int(df[feature_to_adjust].min())
 max_val = int(df[feature_to_adjust].max())
@@ -185,12 +187,18 @@ adjust_values = st.slider(
     f"Adjust {feature_to_adjust}",
     min_val, max_val, (min_val, max_val)
 )
-simulate_df = pd.DataFrame([{feature_to_adjust: val,
-                             **{f: st.session_state.get(f, df[f].mean()) for f in df.drop(['student_id','learning_style',feature_to_adjust], axis=1).columns}}
-                            for val in range(adjust_values[0], adjust_values[1]+1, max(1,(adjust_values[1]-adjust_values[0])//20))])
+
+simulate_df = pd.DataFrame([
+    {f: st.session_state.get(f, df[f].mean()) for f in feature_cols}
+    for _ in range(adjust_values[0], adjust_values[1]+1, max(1, (adjust_values[1]-adjust_values[0])//20))
+])
+simulate_df[feature_to_adjust] = range(adjust_values[0], adjust_values[1]+1, max(1, (adjust_values[1]-adjust_values[0])//20))
+simulate_df = simulate_df[feature_cols]
+
 prob_matrix = clf.predict_proba(simulate_df)
 prob_df = pd.DataFrame(prob_matrix, columns=le.classes_)
 prob_df[feature_to_adjust] = simulate_df[feature_to_adjust]
+
 st.line_chart(prob_df.set_index(feature_to_adjust))
 
 # =========================
@@ -202,7 +210,7 @@ multi_data = []
 for i in range(num_students):
     st.markdown(f"**Student {i+1}**")
     student_dict = {}
-    for f in ['time_on_video','time_on_reading','time_on_practice','num_quizzes_attempted','avg_quiz_score']:
+    for f in feature_cols:
         student_dict[f] = st.slider(f"{f} (Student {i+1})", int(df[f].min()), int(df[f].max()), int(df[f].mean()), key=f"{f}_{i}")
     multi_data.append(student_dict)
 if st.button("Compare Students"):
