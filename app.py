@@ -33,11 +33,12 @@ def train_model(df):
 # =========================
 # Evaluate Model
 # =========================
-@st.cache_resource
 def evaluate_model(df, clf, le):
     X = df.drop(['student_id', 'learning_style'], axis=1)
     y = le.transform(df['learning_style'])
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
     y_pred = clf.predict(X_test)
     report = classification_report(y_test, y_pred, target_names=le.classes_, output_dict=True)
@@ -55,6 +56,16 @@ clf, le = train_model(df)
 report, y_test, y_pred = evaluate_model(df, clf, le)
 
 # =========================
+# Initialize Session State
+# =========================
+if "video" not in st.session_state:
+    st.session_state["video"] = 30
+    st.session_state["reading"] = 30
+    st.session_state["practice"] = 30
+    st.session_state["quizzes"] = 10
+    st.session_state["score"] = 75
+
+# =========================
 # Random Student Simulator
 # =========================
 if st.button("🎲 Generate Random Student"):
@@ -64,11 +75,11 @@ if st.button("🎲 Generate Random Student"):
     st.session_state["quizzes"] = np.random.randint(1, 20)
     st.session_state["score"] = np.random.randint(50, 100)
 
-video = st.slider("🎥 Time on Video (min)", 0, 100, st.session_state.get("video", 30))
-reading = st.slider("📖 Time on Reading (min)", 0, 100, st.session_state.get("reading", 30))
-practice = st.slider("📝 Time on Practice (min)", 0, 100, st.session_state.get("practice", 30))
-quizzes = st.slider("🧾 Number of Quizzes Attempted", 0, 20, st.session_state.get("quizzes", 10))
-score = st.slider("📊 Average Quiz Score (%)", 0, 100, st.session_state.get("score", 75))
+video = st.slider("🎥 Time on Video (min)", 0, 100, st.session_state["video"])
+reading = st.slider("📖 Time on Reading (min)", 0, 100, st.session_state["reading"])
+practice = st.slider("📝 Time on Practice (min)", 0, 100, st.session_state["practice"])
+quizzes = st.slider("🧾 Number of Quizzes Attempted", 0, 20, st.session_state["quizzes"])
+score = st.slider("📊 Average Quiz Score (%)", 0, 100, st.session_state["score"])
 
 # =========================
 # Single Prediction
@@ -104,15 +115,21 @@ if uploaded_file:
     new_data = pd.read_csv(uploaded_file)
     st.write("Preview:", new_data.head())
 
-    predictions = clf.predict(new_data)
-    predicted_labels = le.inverse_transform(predictions)
-    new_data["Predicted Learning Style"] = predicted_labels
+    features = ['time_on_video', 'time_on_reading', 'time_on_practice',
+                'num_quizzes_attempted', 'avg_quiz_score']
 
-    st.write("✅ Predictions Completed")
-    st.dataframe(new_data)
+    try:
+        predictions = clf.predict(new_data[features])
+        predicted_labels = le.inverse_transform(predictions)
+        new_data["Predicted Learning Style"] = predicted_labels
 
-    csv = new_data.to_csv(index=False).encode("utf-8")
-    st.download_button("⬇️ Download Predictions as CSV", csv, "predictions.csv", "text/csv")
+        st.write("✅ Predictions Completed")
+        st.dataframe(new_data)
+
+        csv = new_data.to_csv(index=False).encode("utf-8")
+        st.download_button("⬇️ Download Predictions as CSV", csv, "predictions.csv", "text/csv")
+    except KeyError:
+        st.error("❌ Uploaded CSV does not have the required columns.")
 
 # =========================
 # Model Evaluation
